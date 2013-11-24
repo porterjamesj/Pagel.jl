@@ -83,31 +83,16 @@ gen_rate_matrix(r:Vector, model::Symbol) = gen_rate_matrix!(r,zeros(4,4),model)
 
 
 # Perform a postorder reduction (Felsenstein's algorithm)
-# of the phylogram
-#
-# f is a function to apply to each node, which takes a single argument,
-# the interger index representing the node
-#
-# r is a function to reduce with. at each node we reduce over the
-# value of f applied to a node and the results of postorder reduction
-# over each of its children
-function postorder(f::Function,r::Function,p::Phylo)
-    root = getroot(p)
-    kids = getkids(p)
-    postorder(f,r,root,kids)
-end
-
-function postorder(f::Function,r::Function,node::Int,kids)
-    if kids[node] == []
+# of a phylogram
+function postorder(f::Function, r::Function, node::PhyloNode)
+    if istip(node)
         return f(node)
     else
-        pos = [postorder(f,r,kid,kids) for kid in kids[node]]
+        pos = [postorder(f,r,kid) for kid in node.children]
         push!(pos,f(node))
         return reduce(r,pos)
     end
 end
-
-
 
 # given a vector of rates, a tree, and a dict of character states,
 # compute the likelihood
