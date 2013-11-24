@@ -79,23 +79,60 @@ function gen_rate_matrix!(r::Vector,
     return R
 end
 
-gen_rate_matrix(r:Vector, model::Symbol) = gen_rate_matrix!(r,zeros(4,4),model)
+gen_rate_matrix(r::Vector, model::Symbol) = gen_rate_matrix!(r,zeros(4,4),model)
 
 
-# Perform a postorder reduction (Felsenstein's algorithm)
-# of a phylogram
-function postorder(f::Function, r::Function, node::PhyloNode)
+# convert a state tuple to an index into the
+# rate matrix
+function state2ind(state::Tuple{Int})
+
+end
+
+
+#
+# recursively compute the likelihood of a single node.
+#
+# Q is the rate matrix, states maps from tip labels to
+# an array of character states (e.g. (0,1) (1,1) etc.)
+# i is an integer index into a dimension of Q
+#
+function likelihood(node::PhyloNode, i::Int, Q::Matrix, states::Dict)
     if istip(node)
-        return f(node)
+        return 1  # base case
     else
-        pos = [postorder(f,r,kid) for kid in node.children]
-        push!(pos,f(node))
-        return reduce(r,pos)
+        # compute liklihoods along this branch
+        P = expm(Q*node.length)
+        for child in node.children
+            # compute allowed states for the child
+            if istip(child)
+                childindex = state2ind(states[child.label])
+            else
+                # the child is an internal node and allowed any state
+                childindex = 1:4
+            end
+            return sum([P[i,c]*likelihood(child, c, Q, states)
+                        for c in childindex])
+        end
     end
 end
 
-# given a vector of rates, a tree, and a dict of character states,
-# compute the likelihood
+likelihood(node::PhyloNode,
+           Q::Matrix,
+           states::Dict) = sum([likelihood(node,i,Q,states) for i in 1:4]
+
 #
-function likelihood(rates::Vector,tree::Phylogram,states::Dict)
+# Convert a whitespace separated file with state information into a
+# states dictionary. A -1 indicates missing data
+#
+# NB: It would probably be better to use NA for missing data,
+# but I'm not sure I want to have all of DataFrames as a dependancy
+#
+function statedict(filepath::String)
+    data = readdlm(filepath,'\t')
+    dict = Dict{String,(Int,Int)}()
+    for i in 1:size(data,1)
+        row = [datum=="-"?-1:datum for datum in data[i,:]]
+        dict[row[1]] = (int(row[2]),int(row[3]))
+    end
+    return dict
 end
