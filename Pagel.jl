@@ -113,6 +113,11 @@ function state2ind(state::(Int,Int))
 end
 
 
+# compute the transition probabilites in a given interval
+function P(Q::Matrix,t::Real)
+    return expm(Q*t)
+end
+
 #
 # recursively compute the likelihood of a single node.
 #
@@ -121,14 +126,11 @@ end
 # i is an integer index into a dimension of Q
 #
 function likelihood(node::PhyloNode, i::Int, Q::Matrix, states::Dict)
-
     if istip(node)
         return 1  # base case
     else
         # array to hold results from each child
         res = Float64[]
-        # compute liklihoods along this branch
-        P = expm(Q*node.length)
         for child in node.children
             # compute allowed states for the child
             if istip(child)
@@ -137,7 +139,7 @@ function likelihood(node::PhyloNode, i::Int, Q::Matrix, states::Dict)
                 # the child is an internal node and allowed any state
                 childindex = 1:4
             end
-            push!(res,sum([P[i,c]*likelihood(child, c, Q, states)
+            push!(res,sum([P(Q,child.length)[i,c]*likelihood(child, c, Q, states)
                            for c in childindex]))
         end
         return reduce(*,res)
