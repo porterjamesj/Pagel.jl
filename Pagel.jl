@@ -1,3 +1,7 @@
+module Pagel
+
+using Phylogenetics
+
 # wrap Phylogenetics.jl in my own API
 
 type PhyloNode
@@ -6,7 +10,7 @@ type PhyloNode
     children::Vector{PhyloNode}
 end
 
-getroot(p::Phylogeny) = getroot(p.edge[:,2],p.edge[:,1])
+getroot(p::Phylogeny) = Phylogenetics.getroot(p.edge[:,2],p.edge[:,1])
 
 # produce a nested array of arrays of the same shape as getkids,
 # but which contains edge lengths instead
@@ -37,6 +41,11 @@ function wrap(p::Phylo)
     return wrapnode(root,0.0)
 end
 
+# convenience function to read in a tree and wrap it
+function wrap(filepath::String)
+    return wrap(readtree(filepath)[1])
+end
+
 
 istip(p::PhyloNode) = p.children == []
 
@@ -45,7 +54,7 @@ istip(p::PhyloNode) = p.children == []
 #
 # if model is dependant rates should be of length 8, as follows:
 #
-# 2->1, 3->1, 1->2, 4->2, 1->3, 4->3, 2->4, 3->4
+# q12   q13   q21   q24   q31   q34   q42   q43
 #
 # if model is independant, rates should be of length 4, as follows:
 #
@@ -65,12 +74,15 @@ function gen_rate_matrix!(r::Vector,
         r = [ r[4], r[2], r[3], r[2], r[1], r[4], r[1], r[3]]
     end
     # each column corresonds to a column in the rate matrix
-    @show rates = reshape(r,(2,4))
     # copy rates over
-    R[2,1], R[3,1] = rates[:,1]
-    R[1,2], R[4,2] = rates[:,2]
-    R[1,3], R[4,3] = rates[:,3]
-    R[2,4], R[3,4] = rates[:,4]
+    R[2,1] = r[3]
+    R[3,1] = r[5]
+    R[1,2] = r[1]
+    R[4,2] = r[7]
+    R[1,3] = r[2]
+    R[4,3] = r[8]
+    R[2,4] = r[4]
+    R[3,4] = r[6]
     # compute no-change rates
     R[1,1] = -(R[2,1] + R[3,1])
     R[2,2] = -(R[1,2] + R[4,2])
@@ -84,8 +96,20 @@ gen_rate_matrix(r::Vector, model::Symbol) = gen_rate_matrix!(r,zeros(4,4),model)
 
 # convert a state tuple to an index into the
 # rate matrix
-function state2ind(state::Tuple{Int})
-
+function state2ind(state::(Int,Int))
+    if state == (0,0)
+        return 1
+    elseif state == (0,1)
+        return 2
+    elseif state == (1,0)
+        return 3
+    elseif state == (1,1)
+        return 4
+    else
+        error("state is invald")
+        # TODO: this is super janky, need to implement
+        # it for missing data (-1) as well.
+    end
 end
 
 
@@ -97,9 +121,12 @@ end
 # i is an integer index into a dimension of Q
 #
 function likelihood(node::PhyloNode, i::Int, Q::Matrix, states::Dict)
+
     if istip(node)
         return 1  # base case
     else
+        # array to hold results from each child
+        res = Float64[]
         # compute liklihoods along this branch
         P = expm(Q*node.length)
         for child in node.children
@@ -110,15 +137,16 @@ function likelihood(node::PhyloNode, i::Int, Q::Matrix, states::Dict)
                 # the child is an internal node and allowed any state
                 childindex = 1:4
             end
-            return sum([P[i,c]*likelihood(child, c, Q, states)
-                        for c in childindex])
+            push!(res,sum([P[i,c]*likelihood(child, c, Q, states)
+                           for c in childindex]))
         end
+        return reduce(*,res)
     end
 end
 
 likelihood(node::PhyloNode,
            Q::Matrix,
-           states::Dict) = sum([likelihood(node,i,Q,states) for i in 1:4]
+           states::Dict) = sum([likelihood(node,i,Q,states) for i in 1:4])
 
 #
 # Convert a whitespace separated file with state information into a
@@ -136,3 +164,5 @@ function statedict(filepath::String)
     end
     return dict
 end
+
+end # module Pagel
