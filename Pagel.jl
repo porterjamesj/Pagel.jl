@@ -1,53 +1,62 @@
 module Pagel
 
-using Phylogenetics
-
-# wrap Phylogenetics.jl in my own API
+#
+# parse newick strings by hooking into the Julia parser,
+# see http://jamesporter.me/2013/11/27/how-to-succeed-at-parsing.html
+# for details
+#
 
 type PhyloNode
     label::String
-    length::Float64
     children::Vector{PhyloNode}
+    length::Real
 end
-
-getroot(p::Phylogeny) = Phylogenetics.getroot(p.edge[:,2],p.edge[:,1])
-
-# produce a nested array of arrays of the same shape as getkids,
-# but which contains edge lengths instead
-function getlengths(phy::Phylo)
-    N = length(phy.tipLabel)
-    lengths = [Float64[] for i in 1:N+phy.Nnode]
-    for i in 1:N+phy.Nnode-1
-        push!(lengths[phy.edge[i,1]],phy.edgeLength[i])
-    end
-    return lengths
-end
-
-# turn a Phylo into a tree of PhyloNodes
-function wrap(p::Phylo)
-
-    # given the index of a node and it's length, wrap it
-    function wrapnode(n::Int,l::Float64)
-        return PhyloNode(labels[n],l,
-                         convert(Vector{PhyloNode},
-                                 [wrapnode(n,l) for (n,l) in
-                                  zip(kids[n],lengths[n])]))
-    end
-
-    kids = getkids(p)
-    lengths = getlengths(p)
-    root = getroot(p)
-    labels = [p.tipLabel, p.nodeLabel]
-    return wrapnode(root,0.0)
-end
-
-# convenience function to read in a tree and wrap it
-function wrap(filepath::String)
-    return wrap(readtree(filepath)[1])
-end
-
 
 istip(p::PhyloNode) = p.children == []
+
+function parsenewick(newick::String)
+    newick = rstrip(newick,';')
+    newick = replace(newick,":","+")
+    newick_expr = parse(newick)
+    return parsenewick(newick_expr)
+end
+
+parsenewick(newick::Symbol) = PhyloNode(string(newick), PhyloNode[], -1)
+
+function parsenewick(newick::Expr)
+    if newick.head == :tuple
+        children = [parsenewick(child) for child in newick.args]
+        name = ""
+        length = -1
+    elseif newick.head == :call
+        if newick.args[1] == :+
+            # + indicates length
+            length = newick.args[3]
+            if typeof(newick.args[2]) == Expr
+                if newick.args[2].head == :tuple
+                    children = [parsenewick(child) for child in
+                                newick.args[2].args]
+                    name = ""
+                elseif newick.args[2].head == :call && newick.args[2].args[1] == :*
+                    # * indicates naming
+                    name = string(newick.args[2].args[3])
+                    children = [parsenewick(child) for child in
+                                newick.args[2].args[2].args]
+                end
+            elseif typeof(newick.args[2]) == Symbol || typeof(newick.args[2]) == Int
+                # tip node
+                name = string(newick.args[2])
+                children = PhyloNode[]
+            end
+        elseif newick.args[1] == :*
+            # bare * indicates a node with name but no length
+            name = string(newick.args[3])
+            children = [parsenewick(child) for child in newick.args[2].args]
+            length = -1
+        end
+    end
+    PhyloNode(name,convert(Vector{PhyloNode},children),length)
+end
 
 
 # Given a vector of rates, construct a rate matrix
