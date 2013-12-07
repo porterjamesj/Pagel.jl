@@ -67,7 +67,7 @@ end
 #
 # if model is independant, rates should be of length 4, as follows:
 #
-# 1->3, 3->1, 1->2, 2->1
+# 1->2, 2->1, 1->3, 3->1 (i.e. alpha1, beta1, alpha2, beta2)
 #
 # this is equivalent to the forward and backward rates in the first
 # character, followed by the forward and backward rates in the second
@@ -79,19 +79,28 @@ function gen_rate_matrix!(r::Vector,
                           R::Matrix,
                           model::Symbol)
     if model == :independant
-        # extend the rates, mirroring across antidiagonal
-        r = [ r[4], r[2], r[3], r[2], r[1], r[4], r[1], r[3]]
+        # copy rates over
+        R[1,2] = r[1]
+        R[2,1] = r[2]
+        R[1,3] = r[3]
+        R[3,1] = r[4]
+        # mirror across the antidiagonal
+        R[3,4] = r[1]
+        R[4,3] = r[2]
+        R[2,4] = r[3]
+        R[4,2] = r[4]
+    elseif model == :dependant
+        # each column corresonds to a column in the rate matrix
+        # copy rates over
+        R[2,1] = r[3]
+        R[3,1] = r[5]
+        R[1,2] = r[1]
+        R[4,2] = r[7]
+        R[1,3] = r[2]
+        R[4,3] = r[8]
+        R[2,4] = r[4]
+        R[3,4] = r[6]
     end
-    # each column corresonds to a column in the rate matrix
-    # copy rates over
-    R[2,1] = r[3]
-    R[3,1] = r[5]
-    R[1,2] = r[1]
-    R[4,2] = r[7]
-    R[1,3] = r[2]
-    R[4,3] = r[8]
-    R[2,4] = r[4]
-    R[3,4] = r[6]
     # compute no-change rates
     R[1,1] = -(R[1,2] + R[1,3])
     R[2,2] = -(R[2,1] + R[2,4])
