@@ -1,11 +1,12 @@
 import Cartesian.@forcartesian
 
+# RateMatrix
 #
-# RateMatrix handles converting between tuples
-# describing the state of a species and the index into
-# the rate matrix corresponding to that species
+#  a Matrix along with a mask that describes
+# which indices are parameters of the simulation and which
+# are not (i.e. they are either zero or on the diagonal)
 #
-immutable RateMatrix
+type RateMatrix
     data::Matrix
     mask::BitMatrix
     smax::(Int...)
@@ -50,44 +51,7 @@ immutable RateMatrix
 end
 
 
-function getindex(m::RateMatrix,state1::(Int...),state2::(Int...))
-    index1 = 0
-    for (i,v) in enumerate(state1)
-        index1 += v*m.jump[i]
-    end
-    index2 = 0
-    for (i,v) in enumerate(state2)
-        index2 += v*m.jump[i]
-    end
-    return m.data[index1+1,index2+1]
-end
-
-# macro for delegating undefined methods to the first field of a type
-# see https://github.com/JuliaLang/julia/pull/3292
-macro delegate(source, targets)
-    typename = esc(source.args[1])
-    fieldname = esc(Expr(:quote, source.args[2].args[1]))
-    funcnames = targets.args
-    n = length(funcnames)
-    fdefs = Array(Any, n)
-    for i in 1:n
-        funcname = esc(funcnames[i])
-        fdefs[i] = quote
-                     ($funcname)(a::($typename), args...) =
-                       ($funcname)(a.($fieldname), args...)
-                   end
-    end
-    return Expr(:block, fdefs...)
-end
-
-
-importall Base
-@delegate RateMatrix.data [ndims size]
-
-
 # TipState
-
-expandstate(states,smax) = expandstate(1,states,smax)
 
 # expand a vector of states to account for missing data
 function expandstate(c::Int,states::Vector{(Int...)},smax::(Int...))
@@ -107,6 +71,7 @@ function expandstate(c::Int,states::Vector{(Int...)},smax::(Int...))
     expandstate(c+1,length(tmp)==0 ? states : tmp ,smax)
 end
 
+expandstate(states,smax) = expandstate(1,states,smax)
 
 function state2int(state::(Int...),maxstates::(Int...))
     index = 0::Int
@@ -149,3 +114,7 @@ type TipState
 
     # TODO: constructor from an integer
 end
+
+
+# define getindex with a tip state
+Base.getindex(m::Matrix,t::TipState) = m[t.is]
