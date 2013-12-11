@@ -76,3 +76,69 @@ end
 
 importall Base
 @delegate RateMatrix.data [ndims size]
+
+
+# try something different
+
+expandstate(states,smax) = expandstate(1,states,smax)
+
+# expand a vector of states to account for missing data
+function expandstate(c::Int,states::Vector{(Int...)},smax::(Int...))
+    # base case
+    if c == length(states[1])+1  # this seems jank
+        return states
+    end
+    tmp = (Int...)[]
+    for i in 1:length(states)
+        if states[i][c] == -1
+            for j in 0:smax[c]-1
+                push!(tmp, tuple(setindex!([states[i]...],j,c)...))
+            end
+        end
+    end
+    # base case: if no missing data; don't change anything
+    expandstate(c+1,length(tmp)==0 ? states : tmp ,smax)
+end
+
+
+function state2int(state::(Int...),maxstates::(Int...))
+    index = 0::Int
+    for (i,v) in enumerate(state)
+        index += v * reduce(*,maxstates[i+1:end])
+    end
+    return index+1  # +1 becase julia is 1 indexed
+end
+
+
+immutable TipState
+    states::Vector{(Int...)}
+    smax::(Int...)
+    is::Vector{Int}
+
+    # constructor from a state tuple
+    function TipState(state::(Int...), smax::(Int...))
+
+        # tuples must be same length
+        if length(state) != length(smax)
+            error("TipState cannot be constructed.")
+        end
+
+        # ensure state is valid
+        for i in 1:length(state)
+            if state[1] >= smax[i]
+                error("TipState cannot be constructed.")
+            end
+        end
+
+        # compute the integer vector representation of this state
+        # remember that -1 means missing data, first expand these
+        states = expandstate([state],smax)
+
+        #convert each state to an integer
+        is = [state2int(state,smax) for state in states]
+
+        new(states,smax,is)
+    end
+
+    # TODO: constructor from an integer
+end
