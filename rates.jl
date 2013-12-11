@@ -7,38 +7,45 @@ import Cartesian.@forcartesian
 #
 immutable RateMatrix
     data::Matrix
-    states::(Int...)
-    jump::(Int...)
-    lookup::Vector
+    mask::BitMatrix
+    smax::(Int...)
 
     # constructor
-    function RateMatrix(data::Matrix,states::(Int...))
+    function RateMatrix(data::Matrix,smax::(Int...))
         # data must be square
         if size(data,1) != size(data,2)
             error("RateMatrix must be square")
         end
-        # dimensions suggested by states tuple must
+        # dimensions suggested by smax tuple must
         # match actual dimensionality of data matrix
-        if reduce(*,states) != size(data,1)
-            error("RateMatrix states tuple is incompatible with data matrix.")
+        if reduce(*,smax) != size(data,1)
+            error("RateMatrix smax tuple is incompatible with data matrix.")
         end
 
-        # construct jump table
-        tmp = Array(Int,length(states))
-        for i in 1:length(states)
-            tmp[i] = reduce(*,states[i+1:end])
-        end
-        jump = tuple(tmp...)
-
-        # construct the lookup table
-        lookup = Array((Int...),reduce(*,states))
+        # construct temporary lookup table
+        lookup = Array((Int...),reduce(*,smax))
         i = 1
-        @forcartesian c states begin
+        @forcartesian c smax begin
             lookup[i] = tuple(reverse(c)...)
             i += 1
         end
 
-        new(data,states,jump,lookup)
+        # from the lookup table,construct the mask
+        mask = falses(size(data))
+        @forcartesian c size(data) begin
+            tups = (lookup[c[1]],lookup[c[2]])
+            diffs = 0
+            for i in 1:length(tups[1])
+                if tups[1][i] != tups[2][i]
+                    diffs += 1
+                end
+            end
+            if diffs ==1
+                mask[c...] = true
+            end
+        end
+
+        new(data,mask,smax)
     end
 end
 
@@ -78,7 +85,7 @@ importall Base
 @delegate RateMatrix.data [ndims size]
 
 
-# try something different
+# TipState
 
 expandstate(states,smax) = expandstate(1,states,smax)
 
@@ -110,7 +117,7 @@ function state2int(state::(Int...),maxstates::(Int...))
 end
 
 
-immutable TipState
+type TipState
     states::Vector{(Int...)}
     smax::(Int...)
     is::Vector{Int}
