@@ -1,7 +1,7 @@
 module Pagel
 
 include("newick.jl")
-
+include("types.jl")
 
 
 # compute the transition probabilites in a given interval
@@ -58,25 +58,5 @@ function statedict(filepath::String)
     return dict
 end
 
-
-
-# given a tuple representing the state of a tip
-# and a tuple representing the number of possible
-# states at each tip, return the correct index
-# into the rate matrix
-#
-# note that this does basically no error checking
-function state2ind(state::(Int...),maxstates::(Int...))
-    index = 0::Int
-    for (i,v) in enumerate(state)
-        index += v * reduce(*,maxstates[i+1:end])
-    end
-    return index+1  # +1 becase julia is 1 indexed
-end
-
-# the inverse of the above function
-function ind2state
-
-end
 
 end # module Pagel
