@@ -233,6 +233,18 @@ type TipState
 end
 
 
+# dictionary wrapper
+type StateDict <: Associative
+    dict::Dict
+    smax::(Int...)
+    indmax::Int
+
+    StateDict(dict,smax) = new(dict,smax,reduce(*,smax))
+end
+
+getindex(sd::StateDict,i) = getindex(sd.dict,i)
+
+
 # define getindex with a tip state
 Base.getindex(m::Matrix,t::TipState) = m[t.is]
 Base.getindex(m::Matrix,t1::TipState,t2::TipState) = m[t1.is,t2.is]
