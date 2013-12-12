@@ -3,6 +3,21 @@ module Pagel
 include("newick.jl")
 include("types.jl")
 
+#
+# Convert a whitespace separated file with state information into a
+# states dictionary, which maps from tip labels to TipStates
+#
+function statedict(filepath::String)
+    data = readdlm(filepath,'\t')
+    dict = Dict{String,TipState}()
+    maxstate = tuple(map(x->int(x+1),reducedim(max,data[:,2:end],[1],-1))...)
+    for i in 1:size(data,1)
+        row = [datum=="-"?-1:datum for datum in data[i,:]]
+        dict[row[1]] = TipState(tuple(map(int,row[2:end])...), maxstate)
+    end
+    return dict
+end
+
 
 # compute the transition probabilites in a given interval
 function P(Q::Matrix,t::Real)
@@ -41,22 +56,6 @@ likelihood(node::PhyloNode,
            Q::Matrix,
            states::Dict) = sum([likelihood(node,i,Q,states) for i in 1:4])
 
-#
-# Convert a whitespace separated file with state information into a
-# states dictionary. A -1 indicates missing data
-#
-# NB: It would probably be better to use NA for missing data,
-# but I'm not sure I want to have all of DataFrames as a dependancy
-#
-function statedict(filepath::String)
-    data = readdlm(filepath,'\t')
-    dict = Dict{String,(Int,Int)}()
-    for i in 1:size(data,1)
-        row = [datum=="-"?-1:datum for datum in data[i,:]]
-        dict[row[1]] = (int(row[2]),int(row[3]))
-    end
-    return dict
-end
 
 
 end # module Pagel
