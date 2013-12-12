@@ -1,5 +1,8 @@
 import Cartesian.@forcartesian
 
+# stub type so we can dispatch on model
+immutable Model{M} end
+
 # Transition represents a change in a state
 immutable Transition
     allowed::Bool # is this an allowable transition
@@ -109,43 +112,51 @@ end
 # with the first instance of this transition, and copy the corresponding
 # rate to this location in the RateMatrix
 #
-function RateMatrix(rates::Vector,smax::(Int...),model::Symbol)
-    if !in(model,(:dependant,:independant))
-        error("Invalid model specified.")
-    end
 
+
+function RateMatrix(model::Model{:independant},
+                    rates::Vector,
+                    smax::(Int...))
     r = RateMatrix(smax)
-
     valid = find(isallowed,r.transitions)
 
-    if model == :independant
-        if length(rates) != length(unique(r.transitions[valid]))
-            error("Rate vector not compatible with possible states")
-        end
-    else # model == :dependant
-        if length(rates) != length(valid)
-            error("Rate vector not compatible with possible states")
+    if length(rates) != length(unique(r.transitions[valid]))
+        error("Rate vector not compatible with possible states")
+    end
+
+    firsts = Dict{Transition,Int}()
+    j = 1
+    for i in 1:length(valid)
+        t = r.transitions[valid[i]]
+        if haskey(firsts,t)
+            r.data[valid[i]] = rates[firsts[t]]
+        else
+            r.data[valid[i]] = rates[j]
+            firsts[t] = j
+            j += 1
         end
     end
 
-    if model == :independant
-        firsts = Dict{Transition,Int}()
-        j = 1
-        for i in 1:length(valid)
-            t = r.transitions[valid[i]]
-            @show t, r, firsts, i, j, valid, rates
-            if haskey(firsts,t)
-                r.data[valid[i]] = rates[firsts[t]]
-            else
-                r.data[valid[i]] = rates[j]
-                firsts[t] = j
-                j += 1
-            end
-        end
-    else # model == :dependant
-        for i in 1:length(valid)
-            r.data[valid[i]] = rates[i]
-        end
+    # fill in the determined indices along the diagonal
+    for i in 1:size(r.data,1)
+        r.data[i,i] = -sum(r.data[i,:])
+    end
+
+    return r
+end
+
+function RateMatrix(model::Model{:dependant},
+                    rates::Vector,
+                    smax::(Int...))
+    r = RateMatrix(smax)
+    valid = find(isallowed,r.transitions)
+
+    if length(rates) != length(valid)
+        error("Rate vector not compatible with possible states")
+    end
+
+    for i in 1:length(valid)
+        r.data[valid[i]] = rates[i]
     end
 
     # fill in the determined indices along the diagonal
