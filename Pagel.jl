@@ -2,6 +2,7 @@ module Pagel
 
 include("newick.jl")
 include("types.jl")
+include("opt.jl")
 
 #
 # Convert a whitespace separated file with state information into a
