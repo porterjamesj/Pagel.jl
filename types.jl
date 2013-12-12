@@ -1,14 +1,28 @@
 import Cartesian.@forcartesian
 
+# Transition represents a change in a state
+immutable Transition
+    allowed::Bool # is this an allowable transition
+    trait::Int  # the trait index in the state tuple
+    # the traits we are going from and to
+    from::Int
+    to::Int
+end
+
+Base.show(io::IO,t::Transition) =
+    print(io,t.allowed ? (t.trait, t.from, t.to) : false)
+
+isallowed(t::Transition) = t.allowed
+
 # RateMatrix
 #
-#  a Matrix along with a mask that describes
-# which indices are parameters of the simulation and which
-# are not (i.e. they are either zero or on the diagonal)
+# a Matrix along with a Transitions array that describes
+# which indices are valid transitions; and, if so which
+# transition they represent
 #
 type RateMatrix
     data::Matrix
-    mask::BitMatrix
+    transitions::Matrix{Transition}
     smax::(Int...)
 
     # constructor
@@ -27,27 +41,119 @@ type RateMatrix
         lookup = Array((Int...),reduce(*,smax))
         i = 1
         @forcartesian c smax begin
-            lookup[i] = tuple(reverse(c)...)
+            lookup[i] = tuple(c...)
             i += 1
         end
+        lookup = sort(lookup)  # TODO: This is janky as all hell
 
-        # from the lookup table,construct the mask
+        # from the lookup table,construct the transitions
+        transitions = Array(Transition,size(data))
         mask = falses(size(data))
         @forcartesian c size(data) begin
             tups = (lookup[c[1]],lookup[c[2]])
             diffs = 0
+            loc = 0
             for i in 1:length(tups[1])
                 if tups[1][i] != tups[2][i]
                     diffs += 1
+                    loc = i
                 end
             end
-            if diffs ==1
-                mask[c...] = true
+            if diffs == 1
+                transitions[c...] = Transition(true,loc,
+                                               tups[1][loc]-1,
+                                               tups[2][loc]-1)
+            else
+                transitions[c...] = Transition(false,0,0,0)
             end
         end
 
-        new(data,mask,smax)
+        new(data,transitions,smax)
     end
+end
+
+function RateMatrix(smax::(Int...))
+    s = reduce(*,smax)
+    RateMatrix(zeros(s,s),smax)
+end
+
+#
+# construct from a preexisting vector of data using the computed mask
+# model indicates the model type, since the length of the rates vector
+# should be different for each
+#
+# model should be either dependant (i.e. identical transitions are
+# allowed to have different rates depending on the values of other
+# traits) or independant (i.e. the invariant that identical
+# transitions have the same rate is enforced) model. To illustrate the
+# difference, the transitions:
+#
+# (0,0,0) => (0,0,1) and (0,1,0) => (0,1,1)
+#
+# must have identical rates in an independant model, but must have
+# different rates in a dependant model
+#
+#
+# The rule we use for mapping the rates vector onto the RateMatrix
+# is as follows:
+# If the model is dependant, it's relatively simple. We figure out
+# which indices of the RateMatrix correspond to allowed transitions,
+# call these valid indices. Iterate over the rates vector and copy
+# rates[i] to RateMatrix[valid[i]]
+#
+# If the model is independant, on the other hand, things are a bit
+# more complicated. In this case. we walk over the valid indices of
+# the RateMatrix, checking if we have seen the corrsponding transition
+# before. If not, associate this transition with the current rate
+# index. If so look at which rate index was associated
+# with the first instance of this transition, and copy the corresponding
+# rate to this location in the RateMatrix
+#
+function RateMatrix(rates::Vector,smax::(Int...),model::Symbol)
+    if !in(model,(:dependant,:independant))
+        error("Invalid model specified.")
+    end
+
+    r = RateMatrix(smax)
+
+    valid = find(isallowed,r.transitions)
+
+    if model == :independant
+        if length(rates) != length(unique(r.transitions[valid]))
+            error("Rate vector not compatible with possible states")
+        end
+    else # model == :dependant
+        if length(rates) != length(valid)
+            error("Rate vector not compatible with possible states")
+        end
+    end
+
+    if model == :independant
+        firsts = Dict{Transition,Int}()
+        j = 1
+        for i in 1:length(valid)
+            t = r.transitions[valid[i]]
+            @show t, r, firsts, i, j, valid, rates
+            if haskey(firsts,t)
+                r.data[valid[i]] = rates[firsts[t]]
+            else
+                r.data[valid[i]] = rates[j]
+                firsts[t] = j
+                j += 1
+            end
+        end
+    else # model == :dependant
+        for i in 1:length(valid)
+            r.data[valid[i]] = rates[i]
+        end
+    end
+
+    # fill in the determined indices along the diagonal
+    for i in 1:size(r.data,1)
+        r.data[i,i] = -sum(r.data[i,:])
+    end
+
+    return r
 end
 
 
@@ -56,7 +162,7 @@ end
 # expand a vector of states to account for missing data
 function expandstate(c::Int,states::Vector{(Int...)},smax::(Int...))
     # base case
-    if c == length(states[1])+1  # this seems jank
+    if c == length(states[1])+1  # this seems jank (because of the indexing)
         return states
     end
     tmp = (Int...)[]
@@ -118,3 +224,4 @@ end
 
 # define getindex with a tip state
 Base.getindex(m::Matrix,t::TipState) = m[t.is]
+Base.getindex(m::Matrix,t1::TipState,t2::TipState) = m[t1.is,t2.is]

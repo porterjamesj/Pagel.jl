@@ -2,76 +2,6 @@ module Pagel
 
 include("newick.jl")
 
-# Given a vector of rates, construct a rate matrix
-#
-# if model is dependant rates should be of length 8, as follows:
-#
-# q12   q13   q21   q24   q31   q34   q42   q43
-#
-# if model is independant, rates should be of length 4, as follows:
-#
-# 1->2, 2->1, 1->3, 3->1 (i.e. alpha1, beta1, alpha2, beta2)
-#
-# this is equivalent to the forward and backward rates in the first
-# character, followed by the forward and backward rates in the second
-# character
-#
-# this uses the memory already allocated in R
-# R should be 4 by 4
-function gen_rate_matrix!(r::Vector,
-                          R::Matrix,
-                          model::Symbol)
-    if model == :independant
-        # copy rates over
-        R[1,2] = r[1]
-        R[2,1] = r[2]
-        R[1,3] = r[3]
-        R[3,1] = r[4]
-        # mirror across the antidiagonal
-        R[3,4] = r[1]
-        R[4,3] = r[2]
-        R[2,4] = r[3]
-        R[4,2] = r[4]
-    elseif model == :dependant
-        # each column corresonds to a column in the rate matrix
-        # copy rates over
-        R[2,1] = r[3]
-        R[3,1] = r[5]
-        R[1,2] = r[1]
-        R[4,2] = r[7]
-        R[1,3] = r[2]
-        R[4,3] = r[8]
-        R[2,4] = r[4]
-        R[3,4] = r[6]
-    end
-    # compute no-change rates
-    R[1,1] = -(R[1,2] + R[1,3])
-    R[2,2] = -(R[2,1] + R[2,4])
-    R[3,3] = -(R[3,1] + R[3,4])
-    R[4,4] = -(R[4,2] + R[4,3])
-    return R
-end
-
-gen_rate_matrix(r::Vector, model::Symbol) = gen_rate_matrix!(r,zeros(4,4),model)
-
-
-# convert a state tuple to an index into the
-# rate matrix
-function state2ind(state::(Int,Int))
-    if state == (0,0)
-        return 1
-    elseif state == (0,1)
-        return 2
-    elseif state == (1,0)
-        return 3
-    elseif state == (1,1)
-        return 4
-    else
-        error("state is invald")
-        # TODO: this is super janky, need to implement
-        # it for missing data (-1) as well.
-    end
-end
 
 
 # compute the transition probabilites in a given interval
@@ -143,7 +73,6 @@ function state2ind(state::(Int...),maxstates::(Int...))
     end
     return index+1  # +1 becase julia is 1 indexed
 end
-
 
 # the inverse of the above function
 function ind2state
