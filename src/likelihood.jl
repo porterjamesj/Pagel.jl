@@ -1,8 +1,3 @@
-module Pagel
-
-include("newick.jl")
-include("types.jl")
-include("opt.jl")
 
 #
 # Convert a whitespace separated file with state information into a
@@ -57,5 +52,3 @@ likelihood(node::PhyloNode,
            Q::RateMatrix,
            states::StateDict) = sum([likelihood(node,i,Q,states)
                                      for i in 1:states.indmax])
-
-end # module Pagel
