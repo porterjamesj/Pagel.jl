@@ -13,10 +13,10 @@ function maxlikelihood(model::Symbol,tree::PhyloNode,states::StateDict;
     # TODO: this is wonky; there's a better way
     r = RateMatrix(states.smax)
     trans = r.transitions[find(isallowed,r.transitions)]
-    if algorithm == :dependant
-        dims = trans |> unique |> length
-    else # algorithm == :independat
+    if model == :dependant
         dims = length(trans)
+    else # algorithm == :independant
+        dims = trans |> unique |> length
     end
 
     opt = Opt(algorithm, dims)
@@ -50,7 +50,7 @@ end
 
 # interface that lets you pass filenames
 function maxlikelihood(model::Symbol,
-                       treefile::String,statesfile::String,
+                       treefile::String,statesfile::String;
                        algorithm=:LN_NELDERMEAD,ftol_rel=1e-6)
     tree = readchomp(treefile) |> parsenewick
     states = states = statedict(statesfile)
