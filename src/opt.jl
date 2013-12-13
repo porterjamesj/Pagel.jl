@@ -40,10 +40,21 @@ function maxlikelihood(model::Symbol,tree::PhyloNode,states::StateDict;
     ftol_rel!(opt, ftol_rel)
 
     # initial search point; as long as the dimensionality of the problem
-    # i use the same starting points for the search as Mesquite
+    # I use the same starting points for the search as Mesquite
     inits = Array(Float64,dims)
     for i in 1:dims
         inits[i] = randbool() ? 10 : 0.01
     end
     optimize(opt,inits)
+end
+
+# interface that lets you pass filenames
+function maxlikelihood(model::Symbol,
+                       treefile::String,statesfile::String,
+                       algorithm=:LN_NELDERMEAD,ftol_rel=1e-6)
+    tree = readchomp(treefile) |> parsenewick
+    states = states = statedict(statesfile)
+    maxlikelihood(model, tree,states,
+                  algorithm=algorithm,
+                  ftol_rel=ftol_rel)
 end
